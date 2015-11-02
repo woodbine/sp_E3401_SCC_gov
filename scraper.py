@@ -1,4 +1,3 @@
-
 # -*- coding: utf-8 -*-
 
 #### IMPORTS 1.0
@@ -10,8 +9,7 @@ import urllib2
 import requests
 from datetime import datetime
 from bs4 import BeautifulSoup
-from dateutil.parser import parse
-import itertools
+
 
 #### FUNCTIONS 1.0
 
@@ -40,22 +38,42 @@ def validateFilename(filename):
 
 
 def validateURL(url):
-     try:
-        r = requests.get(url, allow_redirects=True, timeout=20)
+     # try:
+     #    r = requests.get(url, allow_redirects=True, timeout=20)
+     #    count = 1
+     #    while r.status_code == 500 and count < 4:
+     #        print ("Attempt {0} - Status code: {1}. Retrying.".format(count, r.status_code))
+     #        count += 1
+     #        r = requests.get(url, allow_redirects=True, timeout=20)
+     #    sourceFilename = r.headers.get('Content-Disposition')
+     #    if sourceFilename:
+     #        ext = os.path.splitext(sourceFilename)[1].replace('"', '').replace(';', '').replace(' ', '')
+     #    else:
+     #        ext = os.path.splitext(url)[1]
+     #    validURL = r.status_code == 200
+     #    validFiletype = ext in ['.csv', '.xls', '.xlsx']
+     #    return validURL, validFiletype
+     # except:
+     #    print ("Error validating URL.")
+     #    return False, False
+
+    try:
+        r = urllib2.urlopen(url)
         count = 1
-        while r.status_code == 500 and count < 4:
+        while r.getcode() == 500 and count < 4:
             print ("Attempt {0} - Status code: {1}. Retrying.".format(count, r.status_code))
             count += 1
-            r = requests.get(url, allow_redirects=True, timeout=20)
+            r = urllib2.urlopen(url)
         sourceFilename = r.headers.get('Content-Disposition')
+
         if sourceFilename:
             ext = os.path.splitext(sourceFilename)[1].replace('"', '').replace(';', '').replace(' ', '')
         else:
             ext = os.path.splitext(url)[1]
-        validURL = r.status_code == 200
-        validFiletype = ext in ['.csv', '.xls', '.xlsx']
+        validURL = r.getcode() == 200
+        validFiletype = ext.lower() in ['.csv', '.xls', '.xlsx']
         return validURL, validFiletype
-     except:
+    except:
         print ("Error validating URL.")
         return False, False
 
@@ -87,37 +105,67 @@ def convert_mth_strings ( mth_string ):
 #### VARIABLES 1.0
 
 entity_id = "E3401_SCC_gov"
-url = "http://www.stoke.gov.uk/ccm/navigation/council-and-democracy/finance/transparency-2015/"
+urls = ["http://www.stoke.gov.uk/ccm/navigation/council-and-democracy/finance/transparency-2015/", "http://www.stoke.gov.uk/ccm/navigation/council-and-democracy/finance/transparency-2014/", "http://www.stoke.gov.uk/ccm/navigation/council-and-democracy/finance/transparency-2013/", "http://www.stoke.gov.uk/ccm/navigation/council-and-democracy/finance/transparency-2012/", "http://www.stoke.gov.uk/ccm/navigation/council-and-democracy/finance/transparency/"]
 errors = 0
 data = []
+url = 'http://example.com'
 
 #### READ HTML 1.0
-
-
 
 html = urllib2.urlopen(url)
 soup = BeautifulSoup(html, 'lxml')
 
 #### SCRAPE DATA
 
+for url in urls:
+    html = urllib2.urlopen(url)
+    soup = BeautifulSoup(html, 'lxml')
+    block = soup.find('li', 'expanded').find('ul')
+    links = block.find_all('a')
+    for link in links:
+         link_csv = 'http://www.stoke.gov.uk' +link['href']
+         if 'oid' in link_csv:
+             links_csv = link_csv
+             html_csv = urllib2.urlopen(links_csv)
+             soup_csv = BeautifulSoup(html_csv, 'lxml')
+             block_csv = soup_csv.find('li', 'attachment-link').find_all('a')[-1]
+             csvfiles =  soup_csv.find('li', 'attachment-link').text
+             if 'Tran' in csvfiles[:4]:
+                if 'Transparency' in csvfiles and '.csv' in csvfiles:
+                    url = 'http://www.stoke.gov.uk' +block_csv['href'].strip()
+                    csvfiles = csvfiles.split('Transparency Report')[-1].strip().split(' ')
+                    csvYr = csvfiles[1][:4]
+                    csvMth = csvfiles[0][:3]
+                    csvMth = convert_mth_strings(csvMth.upper())
+                    data.append([csvYr, csvMth, url])
+                if 'Transparency' in csvfiles and '.pdf' in csvfiles:
+                     block_csv = soup_csv.find('li', 'attachment-link').find_next('li', 'attachment-link').find_all('a')[-1]
+                     url = 'http://www.stoke.gov.uk' +block_csv['href'].strip()
+                     csvfiles = csvfiles.split('Transparency Report')[-1].strip().split(' ')
+                     csvYr = csvfiles[1][:4]
+                     csvMth = csvfiles[0][:3]
+                     print csvMth, csvYr
+                     csvMth = convert_mth_strings(csvMth.upper())
+                     data.append([csvYr, csvMth, url])
 
-block = soup.find('li', 'expanded').find('ul')
-links = block.find_all('a')
-for link in links:
-     link_csv = 'http://www.stoke.gov.uk' +link['href']
-     if 'oid' in link_csv:
-         links_csv = link_csv
-         html_csv = urllib2.urlopen(links_csv)
-         soup_csv = BeautifulSoup(html_csv, 'lxml')
-         block_csv = soup_csv.find('li', 'attachment-link').find_all('a')[-1]
-         csvfiles =  soup_csv.find('li', 'attachment-link').text
-         if 'Transparency' in csvfiles:
-            url = 'http://www.stoke.gov.uk' +block_csv['href'].strip()
-            csvfiles = csvfiles.split('Transparency')[0].strip()
-            csvYr = csvfiles[-4:]
-            csvMth = csvfiles[:3]
-            csvMth = convert_mth_strings(csvMth.upper())
-            data.append([csvYr, csvMth, url])
+             else:
+                 if 'Transparency' in csvfiles and '.csv' in csvfiles:
+                    url = 'http://www.stoke.gov.uk' +block_csv['href'].strip()
+                    csvfiles = csvfiles.split('Transparency')[0].strip()
+                    csvYr = csvfiles[-4:]
+                    csvMth = csvfiles[:3]
+                    csvMth = convert_mth_strings(csvMth.upper())
+                    data.append([csvYr, csvMth, url])
+                 if 'Transparency' in csvfiles and '.pdf' in csvfiles:
+                     block_csv = soup_csv.find('li', 'attachment-link').find_next('li', 'attachment-link').find_all('a')[-1]
+                     url = 'http://www.stoke.gov.uk' +block_csv['href'].strip()
+                     csvfiles = csvfiles.split('Transparency')[0].strip()
+                     csvYr = csvfiles[-4:]
+                     csvMth = csvfiles[:3]
+                     print csvMth, csvYr
+                     csvMth = convert_mth_strings(csvMth.upper())
+                     data.append([csvYr, csvMth, url])
+
 
 #### STORE DATA 1.0
 
